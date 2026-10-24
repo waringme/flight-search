@@ -70,6 +70,36 @@
           </div>
           <p id="notice" class="notice" role="status" aria-live="polite">Loading flight results…</p>
         </div>
+        <div id="flight-selection-bar" class="flight-selection-bar" aria-label="Selected flights">
+          <div class="selection-overview">
+            <div>
+              <span class="selection-label">Outbound</span>
+              <p id="outbound-selection-preview">No flight selected</p>
+              <button id="clear-outbound-selection" class="button-secondary" type="button" hidden>Remove outbound</button>
+            </div>
+            <div>
+              <span class="selection-label">Inbound <span class="optional-label">(optional)</span></span>
+              <p id="inbound-selection-preview">No flight selected</p>
+              <button id="clear-inbound-selection" class="button-secondary" type="button" hidden>Remove inbound</button>
+            </div>
+          </div>
+          <div class="selection-actions">
+            <p id="flight-selection-status" role="status" aria-live="polite">Choose an outbound flight to continue. Inbound is optional.</p>
+            <button id="continue-flight-selection" class="button-primary" type="button" aria-controls="flight-summary" aria-expanded="false" disabled>Continue</button>
+          </div>
+        </div>
+        <section id="flight-summary" class="flight-summary" aria-labelledby="flight-summary-heading" hidden>
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">REVIEW YOUR SELECTION</p>
+              <h3 id="flight-summary-heading" tabindex="-1">Your flight summary</h3>
+            </div>
+            <button id="edit-flight-selection" class="button-secondary" type="button">Edit selection</button>
+          </div>
+          <p id="flight-summary-description" class="summary-description"></p>
+          <div id="flight-summary-cards" class="flight-summary-cards"></div>
+          <p class="summary-disclaimer">This is a summary, not a booking. Points and taxes are shown separately for each flight; confirm availability and costs with the airline.</p>
+        </section>
         <div class="sort-help">
           <span>Your first selected column is the primary sort; add more columns as tie-breakers. Click a sorted heading again to reverse it.</span>
           <button id="reset-sort" class="button-secondary reset-sort" type="button" hidden>Reset sorting</button>
@@ -101,7 +131,6 @@
                   <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="LoyaltyScheme" data-sort-label="loyalty scheme">Loyalty scheme <span class="sort-indicator" aria-hidden="true"></span></button></th>
                   <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="PointsPerItinerary" data-sort-label="points per passenger">Points / passenger <span class="sort-indicator" aria-hidden="true"></span></button></th>
                   <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="TaxesPerItinerary" data-sort-label="taxes">Taxes <span class="sort-indicator" aria-hidden="true"></span></button></th>
-                  <th scope="col">Select</th>
                 </tr></thead>
                 <tbody id="outbound-results-body"></tbody>
               </table>
@@ -135,7 +164,6 @@
               </fieldset>
               <p id="inbound-selection-note" class="inbound-selection-note" aria-live="polite">
                 <span id="inbound-selection-message">Choose an outbound flight to set the inbound date minimum. Inbound may depart from a different city.</span>
-                <button id="clear-outbound-selection" class="button-secondary" type="button" hidden>Clear outbound selection</button>
               </p>
               <p id="inbound-count" class="result-count" aria-live="polite">Loading…</p>
             </div>

@@ -35,6 +35,19 @@ const inboundSelectionMessage = document.querySelector("#inbound-selection-messa
 const clearOutboundSelection = document.querySelector("#clear-outbound-selection");
 const sortButtons = [...document.querySelectorAll("[data-sort]")];
 const resetSortButton = document.querySelector("#reset-sort");
+const selectionBar = document.querySelector("#flight-selection-bar");
+const selectionPreviews = {
+  outbound: document.querySelector("#outbound-selection-preview"),
+  inbound: document.querySelector("#inbound-selection-preview"),
+};
+const selectionStatus = document.querySelector("#flight-selection-status");
+const clearInboundSelection = document.querySelector("#clear-inbound-selection");
+const continueSelection = document.querySelector("#continue-flight-selection");
+const flightSummary = document.querySelector("#flight-summary");
+const summaryHeading = document.querySelector("#flight-summary-heading");
+const summaryDescription = document.querySelector("#flight-summary-description");
+const summaryCards = document.querySelector("#flight-summary-cards");
+const editSelection = document.querySelector("#edit-flight-selection");
 
 const PAGE_SIZE = 50;
 const MONTHS = new Map([
@@ -46,6 +59,8 @@ let featureRegistry = [];
 let rawRows = [];
 let itineraries = [];
 let selectedOutbound = null;
+let selectedInbound = null;
+let featureLoadId = 0;
 const pages = { outbound: 0, inbound: 0 };
 const defaultSort = { key: "TravelDate", direction: "ascending" };
 let sortCriteria = [{ ...defaultSort }];
@@ -285,7 +300,7 @@ function formatUtcDateTime(value) {
   }).format(date)} UTC`;
 }
 
-function getItineraryDetails(itinerary) {
+function getItineraryFields(itinerary) {
   const details = [
     ["Direction", itinerary.SearchDirection],
     ["Route", `${itinerary.ItineraryOrigin} → ${itinerary.ItineraryDestination}`],
@@ -303,7 +318,11 @@ function getItineraryDetails(itinerary) {
     ["Availability source", itinerary.AvailabilitySource],
   ];
   return details
-    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .filter(([, value]) => value !== null && value !== undefined && value !== "");
+}
+
+function getItineraryDetails(itinerary) {
+  return getItineraryFields(itinerary)
     .map(([label, value]) => `${label}: ${value}`)
     .join("\n");
 }
@@ -339,17 +358,73 @@ function renderRouteCell(itinerary) {
   return cell;
 }
 
+function renderFlightChoice(itinerary, panelName, isSelected) {
+  function updateSelection(checked, control, selector) {
+    const restoreFocus = document.activeElement === control;
+    if (panelName === "outbound") {
+      selectedOutbound = checked ? itinerary : null;
+      if (selectedOutbound && syncInboundDateCheckbox.checked) {
+        dateInputs.inboundFrom.value = new Date(getInboundMinimumDate()).toISOString().slice(0, 10);
+      }
+    } else {
+      selectedInbound = checked ? itinerary : null;
+    }
+    closeFlightSummary();
+    synchronizeDateRanges();
+    if (restoreFocus) {
+      [...resultPanels[panelName].body.querySelectorAll(selector)]
+        .find((input) => input.value === control.value)?.focus({ preventScroll: true });
+    }
+  }
+
+  const controls = document.createElement("div");
+  controls.className = "flight-choice-controls";
+  const label = document.createElement("label");
+  label.className = "flight-choice";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.className = "select-flight";
+  checkbox.checked = isSelected;
+  checkbox.value = itineraryKey(itinerary);
+  checkbox.setAttribute(
+    "aria-label",
+    `Select ${panelName} flight ${itinerary.ItineraryOrigin} to ${itinerary.ItineraryDestination} on ${itinerary.TravelDate}`,
+  );
+  checkbox.addEventListener("change", () => {
+    updateSelection(checkbox.checked, checkbox, ".select-flight");
+  });
+  label.append(checkbox, itinerary.TravelDate);
+  const selectButton = document.createElement("button");
+  selectButton.type = "button";
+  selectButton.className = "button-secondary choose-flight";
+  selectButton.value = itineraryKey(itinerary);
+  selectButton.textContent = isSelected ? "Selected" : "Choose";
+  selectButton.setAttribute("aria-pressed", String(isSelected));
+  selectButton.setAttribute(
+    "aria-label",
+    `${isSelected ? "Deselect" : "Choose"} ${panelName} flight ${itinerary.ItineraryOrigin} to ${itinerary.ItineraryDestination} on ${itinerary.TravelDate}`,
+  );
+  selectButton.addEventListener("click", () => {
+    updateSelection(!isSelected, selectButton, ".choose-flight");
+  });
+  controls.append(label, selectButton);
+  return controls;
+}
+
 function renderItinerary(itinerary, panelName) {
   const row = document.createElement("tr");
   const details = getItineraryDetails(itinerary);
-  const isSelectedOutbound = panelName === "outbound"
-    && selectedOutbound
-    && itineraryKey(selectedOutbound) === itineraryKey(itinerary);
-  if (isSelectedOutbound) row.classList.add("selected-outbound");
+  const selectedFlight = panelName === "outbound" ? selectedOutbound : selectedInbound;
+  const isSelected = Boolean(selectedFlight
+    && itineraryKey(selectedFlight) === itineraryKey(itinerary));
+  if (isSelected) row.classList.add("selected-flight");
   row.title = details;
   row.setAttribute("aria-label", details.replaceAll("\n", ". "));
   row.tabIndex = 0;
-  row.append(createCell("date-cell", itinerary.TravelDate));
+  const dateCell = document.createElement("td");
+  dateCell.className = "date-cell";
+  dateCell.append(renderFlightChoice(itinerary, panelName, isSelected));
+  row.append(dateCell);
   row.append(renderRouteCell(itinerary));
 
   const cabinCell = document.createElement("td");
@@ -372,28 +447,6 @@ function renderItinerary(itinerary, panelName) {
 
   const taxesText = itinerary.TaxesPerItinerary === "" ? "—" : formatTaxes(itinerary);
   row.append(createCell("taxes-cell", taxesText));
-  if (panelName === "outbound") {
-    const actionCell = document.createElement("td");
-    actionCell.className = "select-flight-cell";
-    const selectButton = document.createElement("button");
-    selectButton.className = "button-secondary select-flight";
-    selectButton.type = "button";
-    selectButton.textContent = isSelectedOutbound ? "Selected" : "Choose";
-    selectButton.setAttribute("aria-pressed", String(Boolean(isSelectedOutbound)));
-    selectButton.setAttribute(
-      "aria-label",
-      `${isSelectedOutbound ? "Deselect" : "Select"} outbound flight ${itinerary.ItineraryOrigin} to ${itinerary.ItineraryDestination} on ${itinerary.TravelDate}`,
-    );
-    selectButton.addEventListener("click", () => {
-      selectedOutbound = isSelectedOutbound ? null : itinerary;
-      if (selectedOutbound && syncInboundDateCheckbox.checked) {
-        dateInputs.inboundFrom.value = new Date(getInboundMinimumDate()).toISOString().slice(0, 10);
-      }
-      synchronizeDateRanges();
-    });
-    actionCell.append(selectButton);
-    row.append(actionCell);
-  }
   return row;
 }
 
@@ -414,6 +467,58 @@ function renderPanel(panelName) {
   panel.empty.hidden = filtered.length > 0;
 }
 
+function closeFlightSummary() {
+  flightSummary.hidden = true;
+  continueSelection.setAttribute("aria-expanded", "false");
+}
+
+function renderSelection() {
+  for (const [direction, itinerary] of [
+    ["outbound", selectedOutbound],
+    ["inbound", selectedInbound],
+  ]) {
+    selectionPreviews[direction].textContent = itinerary
+      ? `${itinerary.ItineraryOrigin} → ${itinerary.ItineraryDestination} · ${itinerary.TravelDate} · ${itinerary.Cabin}`
+      : "No flight selected";
+  }
+  continueSelection.disabled = !selectedOutbound;
+  clearOutboundSelection.hidden = !selectedOutbound;
+  clearInboundSelection.hidden = !selectedInbound;
+  selectionStatus.textContent = selectedOutbound
+    ? selectedInbound
+      ? "Both flights selected. Continue to review your flight summary."
+      : "Outbound selected. Add an inbound flight or continue with outbound only."
+    : selectedInbound
+      ? "Inbound selected. Choose an outbound flight to continue."
+      : "Choose an outbound flight to continue. Inbound is optional.";
+}
+
+function createSummaryCard(itinerary, direction) {
+  const card = document.createElement("article");
+  card.className = "flight-summary-card";
+  const label = document.createElement("p");
+  label.className = "eyebrow";
+  label.textContent = direction === "outbound" ? "OUTBOUND FLIGHT" : "INBOUND FLIGHT";
+  const heading = document.createElement("h4");
+  heading.textContent = `${itinerary.ItineraryOrigin} → ${itinerary.ItineraryDestination}`;
+  const details = document.createElement("dl");
+  for (const [name, value] of getItineraryFields(itinerary)) {
+    if (name === "Route" || name === "Direction") continue;
+    const term = document.createElement("dt");
+    term.textContent = name === "Points" ? "Points / passenger" : name;
+    const description = document.createElement("dd");
+    description.textContent = name === "Flights"
+      ? itinerary.segments.map((segment) => [
+        segment.number,
+        segment.origin && segment.destination ? `${segment.origin} → ${segment.destination}` : "",
+      ].filter(Boolean).join(" · ")).join("; ")
+      : value;
+    details.append(term, description);
+  }
+  card.append(label, heading, details);
+  return card;
+}
+
 function render() {
   renderPanel("outbound");
   renderPanel("inbound");
@@ -424,7 +529,7 @@ function render() {
     : selectedDate
       ? `Inbound travel starts at least one day after ${selectedDate}. It may depart from a different city.`
       : "Choose an outbound flight to set the inbound date minimum. Inbound may depart from a different city.";
-  clearOutboundSelection.hidden = !selectedOutbound;
+  renderSelection();
   setNotice(rawRows.length
     ? `${rawRows.length.toLocaleString("en-GB")} flight legs grouped into ${itineraries.length.toLocaleString("en-GB")} itineraries.`
     : "No cached flights were returned for this feature.");
@@ -452,14 +557,20 @@ function updateSortHeaders() {
 }
 
 async function loadFeature(featureId) {
+  const loadId = ++featureLoadId;
   pages.outbound = 0;
   pages.inbound = 0;
+  rawRows = [];
+  itineraries = [];
   selectedOutbound = null;
-  for (const panel of Object.values(resultPanels)) panel.body.replaceChildren();
+  selectedInbound = null;
+  closeFlightSummary();
+  synchronizeDateRanges();
   setNotice("Loading flight results…");
   for (const panel of Object.values(resultPanels)) panel.count.textContent = "Loading…";
   try {
     const result = await fetchJson(`/api/features/${encodeURIComponent(featureId)}/results`);
+    if (loadId !== featureLoadId) return;
     rawRows = result.rows;
     itineraries = buildItineraries(rawRows);
     const searchedLabel = result.searchDate ? `Searched ${result.searchDate}` : "No search date";
@@ -468,6 +579,7 @@ async function loadFeature(featureId) {
       : `${searchedLabel} · API remaining: ${Number(result.rateLimitRemaining).toLocaleString("en-GB")}`;
     render();
   } catch (error) {
+    if (loadId !== featureLoadId) return;
     rawRows = [];
     itineraries = [];
     for (const panel of Object.values(resultPanels)) panel.count.textContent = "Unavailable";
@@ -505,21 +617,16 @@ featureSelect.addEventListener("change", () => {
   if (feature) loadFeature(feature.id);
 });
 typeSelect.addEventListener("change", () => {
-  pages.outbound = 0;
-  pages.inbound = 0;
-  render();
+  selectedOutbound = null;
+  selectedInbound = null;
+  closeFlightSummary();
+  synchronizeDateRanges();
 });
 cabinSelect.addEventListener("change", () => {
   pages.outbound = 0;
   pages.inbound = 0;
   render();
 });
-function nextDate(value) {
-  if (!value) return "";
-  const date = new Date(`${value}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return date.toISOString().slice(0, 10);
-}
 function synchronizeDateRanges() {
   const outboundStart = dateInputs.outboundFrom.value;
   if (outboundStart) {
@@ -530,10 +637,10 @@ function synchronizeDateRanges() {
   if (outboundStart && dateInputs.outboundTo.value && dateInputs.outboundTo.value < outboundStart) {
     dateInputs.outboundTo.value = outboundStart;
   }
-  const outboundEnd = dateInputs.outboundTo.value || outboundStart;
-  const inboundMinimum = syncInboundDateCheckbox.checked && selectedOutbound?.TravelDate
-    ? new Date(getInboundMinimumDate()).toISOString().slice(0, 10)
-    : nextDate(outboundEnd);
+  const inboundMinimumDate = getInboundMinimumDate();
+  const inboundMinimum = inboundMinimumDate === null
+    ? ""
+    : new Date(inboundMinimumDate).toISOString().slice(0, 10);
   if (inboundMinimum) dateInputs.inboundFrom.min = inboundMinimum;
   else dateInputs.inboundFrom.removeAttribute("min");
   if (inboundMinimum && dateInputs.inboundFrom.value && dateInputs.inboundFrom.value < inboundMinimum) {
@@ -551,7 +658,17 @@ function synchronizeDateRanges() {
   }
   pages.outbound = 0;
   pages.inbound = 0;
+  const inboundSelectionExpired = selectedInbound
+    && inboundMinimumDate !== null
+    && parseUkDate(selectedInbound.TravelDate) < inboundMinimumDate;
+  if (inboundSelectionExpired) {
+    selectedInbound = null;
+    closeFlightSummary();
+  }
   render();
+  if (inboundSelectionExpired) {
+    selectionStatus.textContent = "Your previous inbound flight is before the new minimum date and has been removed. Choose a later inbound flight or continue with outbound only.";
+  }
 }
 for (const input of Object.values(dateInputs)) {
   input.addEventListener("change", synchronizeDateRanges);
@@ -564,7 +681,34 @@ syncInboundDateCheckbox.addEventListener("change", () => {
 });
 clearOutboundSelection.addEventListener("click", () => {
   selectedOutbound = null;
+  closeFlightSummary();
   synchronizeDateRanges();
+});
+clearInboundSelection.addEventListener("click", () => {
+  selectedInbound = null;
+  closeFlightSummary();
+  render();
+});
+continueSelection.addEventListener("click", () => {
+  if (!selectedOutbound) {
+    selectionStatus.textContent = "Choose an outbound flight before continuing.";
+    return;
+  }
+  const cards = [createSummaryCard(selectedOutbound, "outbound")];
+  if (selectedInbound) cards.push(createSummaryCard(selectedInbound, "inbound"));
+  summaryCards.replaceChildren(...cards);
+  summaryDescription.textContent = selectedInbound
+    ? "Outbound and inbound flights selected. Review the details for each flight below."
+    : "Outbound only. No inbound flight selected; you can add one by editing your selection.";
+  flightSummary.hidden = false;
+  continueSelection.setAttribute("aria-expanded", "true");
+  summaryHeading.focus({ preventScroll: true });
+  flightSummary.scrollIntoView({ block: "start" });
+});
+editSelection.addEventListener("click", () => {
+  closeFlightSummary();
+  selectionBar.scrollIntoView({ block: "start" });
+  continueSelection.focus({ preventScroll: true });
 });
 searchInput.addEventListener("input", () => {
   pages.outbound = 0;

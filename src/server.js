@@ -2,6 +2,8 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import {
   AER_LINGUS_REWARDS_SEARCH,
   AUSTRALIA_FLIGHTS_SEARCH,
@@ -9,7 +11,6 @@ import {
 } from "./flight-results-csv.js";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PUBLIC_ROOT = path.join(PROJECT_ROOT, "public");
 const FEATURE_REGISTRY = [
   AUSTRALIA_FLIGHTS_SEARCH,
   NORTH_AMERICA_FLIGHTS_SEARCH,
@@ -160,35 +161,73 @@ function createSearchTypes(rows, feature) {
   return [...types, ...upgradeTypes].sort((left, right) => left.label.localeCompare(right.label));
 }
 
-async function readFeatureRows(feature) {
-  const content = await readFile(path.join(PROJECT_ROOT, feature.outputFile), "utf8");
-  return parseCsv(content);
+async function readFeatureRows(feature, projectRoot) {
+  try {
+    const content = await readFile(path.join(projectRoot, feature.outputFile), "utf8");
+    return parseCsv(content);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    const metadata = await readFeatureMetadata(feature, projectRoot);
+    if (!Array.isArray(metadata.quarterlyChunks) || metadata.quarterlyChunks.length === 0) {
+      throw error;
+    }
+    const chunks = await Promise.all(metadata.quarterlyChunks.map(async (chunk) => {
+      if (typeof chunk.file !== "string" || path.basename(chunk.file) !== chunk.file) {
+        throw new Error(`Invalid quarterly CSV filename for ${feature.name}.`);
+      }
+      const content = await readFile(path.join(projectRoot, chunk.file), "utf8");
+      const rows = parseCsv(content);
+      if (rows.length !== chunk.rows) {
+        throw new Error(`Quarterly CSV row count mismatch: ${chunk.file}.`);
+      }
+      return rows;
+    }));
+    return chunks.flat();
+  }
 }
 
-async function readFeatureMetadata(feature) {
+async function readFeatureMetadata(feature, projectRoot) {
   try {
-    return JSON.parse(await readFile(path.join(PROJECT_ROOT, feature.metadataFile), "utf8"));
+    return JSON.parse(await readFile(path.join(projectRoot, feature.metadataFile), "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") return {};
     throw error;
   }
 }
 
-function sendJson(response, statusCode, body) {
+function writeJsonHeaders(response, statusCode) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   });
+}
+
+function sendJson(response, statusCode, body) {
+  writeJsonHeaders(response, statusCode);
   response.end(JSON.stringify(body));
+}
+
+async function sendResults(response, metadata, rows) {
+  function* chunks() {
+    yield `${JSON.stringify(metadata).slice(0, -1)},"rows":[`;
+    for (let index = 0; index < rows.length; index += 100) {
+      yield `${index === 0 ? "" : ","}${rows.slice(index, index + 100)
+        .map((row) => JSON.stringify(row)).join(",")}`;
+    }
+    yield "]}";
+  }
+
+  writeJsonHeaders(response, 200);
+  await pipeline(Readable.from(chunks()), response);
 }
 
 function sendError(response, statusCode, message) {
   sendJson(response, statusCode, { error: message });
 }
 
-export function createAppServer() {
-  return createServer(async (request, response) => {
+export function createRequestHandler({ projectRoot = PROJECT_ROOT } = {}) {
+  return async (request, response) => {
     if (request.method !== "GET") {
       response.setHeader("Allow", "GET");
       sendError(response, 405, "Only GET requests are supported.");
@@ -200,7 +239,7 @@ export function createAppServer() {
       try {
         const features = await Promise.all(
           FEATURE_REGISTRY.map(async (feature) => {
-            const rows = await readFeatureRows(feature);
+            const rows = await readFeatureRows(feature, projectRoot);
             return {
               id: feature.id,
               name: feature.name,
@@ -226,18 +265,21 @@ export function createAppServer() {
 
       try {
         const [rows, metadata] = await Promise.all([
-          readFeatureRows(feature),
-          readFeatureMetadata(feature),
+          readFeatureRows(feature, projectRoot),
+          readFeatureMetadata(feature, projectRoot),
         ]);
-        sendJson(response, 200, {
+        await sendResults(response, {
           feature: { id: feature.id, name: feature.name },
           searchDate: rows[0]?.SearchDate ?? "",
           rateLimitRemaining: metadata.rateLimitRemaining ?? null,
-          rows,
-        });
+        }, rows);
       } catch (error) {
         console.error(`Unable to load results for ${feature.name}:`, error);
-        sendError(response, 500, `Could not load ${feature.name} results. Check that its CSV file exists.`);
+        if (response.headersSent || response.destroyed) {
+          response.destroy(error);
+        } else {
+          sendError(response, 500, `Could not load ${feature.name} results. Check that its CSV file exists.`);
+        }
       }
       return;
     }
@@ -249,7 +291,7 @@ export function createAppServer() {
     }
 
     try {
-      const content = await readFile(path.join(PUBLIC_ROOT, staticFile.file));
+      const content = await readFile(path.join(projectRoot, "public", staticFile.file));
       response.writeHead(200, {
         "Content-Type": staticFile.contentType,
         "Cache-Control": "no-cache",
@@ -261,7 +303,11 @@ export function createAppServer() {
       console.error(`Unable to serve ${staticFile.file}:`, error);
       sendError(response, 500, "Could not load the web application.");
     }
-  });
+  };
+}
+
+export function createAppServer(options) {
+  return createServer(createRequestHandler(options));
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {

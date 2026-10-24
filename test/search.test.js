@@ -564,7 +564,12 @@ test("serves the frontend and exposes feature data through a local API", async (
   assert.match(pageHtml, /id="sync-inbound-date" type="checkbox" checked/);
   assert.match(pageHtml, /id="inbound-selection-note"/);
   assert.match(pageHtml, /id="clear-outbound-selection"/);
-  assert.match(pageHtml, /Select<\/th>/);
+  assert.match(pageHtml, /id="clear-inbound-selection"/);
+  assert.match(pageHtml, /id="continue-flight-selection"[^>]*disabled/);
+  assert.match(pageHtml, /id="flight-summary"[^>]*hidden/);
+  assert.match(pageHtml, /id="flight-summary-heading" tabindex="-1"/);
+  assert.match(pageHtml, /id="edit-flight-selection"/);
+  assert.doesNotMatch(pageHtml, /Select<\/th>/);
   assert.match(pageHtml, /id="outbound-results-body"/);
   assert.match(pageHtml, /id="inbound-results-body"/);
   for (const sortKey of [
@@ -598,7 +603,13 @@ test("serves the frontend and exposes feature data through a local API", async (
   assert.match(appSource, /syncInboundDateCheckbox\.checked/);
   assert.match(appSource, /Inbound dates are independent of the selected outbound flight/);
   assert.match(appSource, /\["Sept", 8\]/);
-  assert.match(appSource, /className = "button-secondary select-flight"/);
+  assert.match(appSource, /checkbox\.type = "checkbox"/);
+  assert.match(appSource, /checkbox\.className = "select-flight"/);
+  assert.match(appSource, /className = "button-secondary choose-flight"/);
+  assert.match(appSource, /selectedInbound = checked \? itinerary : null/);
+  assert.match(appSource, /continueSelection\.disabled = !selectedOutbound/);
+  assert.match(appSource, /createSummaryCard\(selectedInbound, "inbound"\)/);
+  assert.match(appSource, /summaryHeading\.focus/);
   assert.match(appSource, /It may depart from a different city/);
   assert.match(appSource, /reverseDirections/);
   assert.match(appSource, /API remaining:/);
