@@ -390,6 +390,42 @@ test("writes Aer Lingus results in separate calendar-quarter CSVs", (context) =>
   assert.equal(metadata.quarterlyChunks.length, 2);
 });
 
+test("writes North America results in separate calendar-quarter CSVs", (context) => {
+  const outputDirectory = mkdtempSync(path.join(os.tmpdir(), "north-america-quarterly-"));
+  context.after(() => rmSync(outputDirectory, { recursive: true, force: true }));
+  const records = ["2026-10-24", "2027-01-01"].map((date, index) => ({
+    ID: `na-quarter-${index}`,
+    Date: date,
+    matchingCabin: "business",
+    AvailabilityTrips: [{
+      ID: `na-quarter-trip-${index}`,
+      Source: "british",
+      OriginAirport: "LHR",
+      DestinationAirport: "JFK",
+      Carriers: "BA",
+      Cabin: "business",
+      RemainingSeats: 1,
+    }],
+  }));
+  const result = writeFlightResultsCsv({
+    northAmericaSearches: [{
+      scheme: "BA",
+      direction: "Europe to North America",
+      program: "BA Executive Club (Avios)",
+      business: records,
+    }],
+  }, "2026-10-24", NORTH_AMERICA_FLIGHTS_SEARCH, outputDirectory, new Date("2026-10-24T10:00:00.000Z"));
+
+  assert.deepEqual(result.chunkFiles.map(({ file, rows }) => [path.basename(file), rows]), [
+    ["North America Flights 2026-Q4.csv", 1],
+    ["North America Flights 2027-Q1.csv", 1],
+  ]);
+  const quarter = parseCsv(readFileSync(path.join(outputDirectory, "North America Flights 2027-Q1.csv"), "utf8"));
+  assert.deepEqual(quarter.map((row) => row.TravelDate), ["01-Jan-2027"]);
+  const metadata = JSON.parse(readFileSync(path.join(outputDirectory, "North America Flights.meta.json"), "utf8"));
+  assert.equal(metadata.quarterlyChunks.length, 2);
+});
+
 test("writes a timestamped history CSV and refreshes the latest CSV", (context) => {
   const outputDirectory = mkdtempSync(path.join(os.tmpdir(), "flight-search-csv-"));
   context.after(() => rmSync(outputDirectory, { recursive: true, force: true }));

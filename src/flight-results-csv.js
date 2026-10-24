@@ -267,7 +267,10 @@ export function writeFlightResultsCsv(
     `${path.basename(feature.outputFile, path.extname(feature.outputFile))} ${timestamp}.csv`,
   );
   const quarterlyRows = new Map();
-  if (feature.id === AER_LINGUS_REWARDS_SEARCH.id) {
+  if (
+    feature.id === AER_LINGUS_REWARDS_SEARCH.id
+    || feature.id === NORTH_AMERICA_FLIGHTS_SEARCH.id
+  ) {
     for (const row of rows) {
       const quarter = getQuarterKey(row.TravelDate);
       if (!quarter) continue;
