@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b1b2b">
+    <title>Flight search results</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Flight search home">
+        <span class="brand-mark" aria-hidden="true">✈</span>
+        <span>Flight search</span>
+      </a>
+      <span class="topbar-note">Award availability explorer</span>
+    </header>
+
+    <main class="page-shell">
+      <section class="intro">
+        <p class="eyebrow">TRAVEL REWARDS · AUSTRALIA</p>
+        <h1>Find your flight</h1>
+        <p class="intro-copy">Explore cached award availability across BA Avios, Qantas Points and partner airlines.</p>
+      </section>
+
+      <section class="search-panel" aria-labelledby="search-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">SEARCH LIBRARY</p>
+            <h2 id="search-heading">Choose a search</h2>
+          </div>
+          <span id="search-date" class="date-badge">Loading search date…</span>
+        </div>
+        <div class="control-grid">
+          <label class="field">
+            <span>Search feature</span>
+            <select id="feature-select" aria-label="Search feature">
+              <option value="">Loading features…</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Search type</span>
+            <select id="type-select" aria-label="Search type" disabled>
+              <option value="">Choose a feature first</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Cabin</span>
+            <select id="cabin-select" aria-label="Filter by cabin">
+              <option value="all">All cabins</option>
+              <option value="economy">Economy</option>
+              <option value="first">First class</option>
+              <option value="business">Business</option>
+              <option value="premium">Premium economy</option>
+            </select>
+          </label>
+          <label class="field search-field">
+            <span>Find a route or flight</span>
+            <input id="search-input" type="search" placeholder="Try SYD, BA15 or Emirates" autocomplete="off">
+          </label>
+        </div>
+      </section>
+
+      <section class="results-section" aria-labelledby="results-heading">
+        <div class="results-heading">
+          <div>
+            <p class="eyebrow">AVAILABLE ITINERARIES</p>
+            <h2 id="results-heading">Outbound and inbound results</h2>
+          </div>
+          <p id="notice" class="notice" role="status" aria-live="polite">Loading flight results…</p>
+        </div>
+        <div class="sort-help">
+          <span>Your first selected column is the primary sort; add more columns as tie-breakers. Click a sorted heading again to reverse it.</span>
+          <button id="reset-sort" class="button-secondary reset-sort" type="button" hidden>Reset sorting</button>
+        </div>
+        <div class="split-results">
+          <section class="direction-panel" aria-labelledby="outbound-heading">
+            <div class="direction-heading">
+              <h3 id="outbound-heading">Outbound</h3>
+              <fieldset class="panel-date-range">
+                <legend>Outbound travel dates</legend>
+                <label class="field panel-date-field">
+                  <span>From</span>
+                  <input id="outbound-date-from" type="date" aria-label="Outbound date from">
+                </label>
+                <label class="field panel-date-field">
+                  <span>To</span>
+                  <input id="outbound-date-to" type="date" aria-label="Outbound date to">
+                </label>
+              </fieldset>
+              <p id="outbound-count" class="result-count" aria-live="polite">Loading…</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th scope="col" aria-sort="ascending"><button class="sort-button" type="button" data-sort="TravelDate" data-sort-label="travel date">Travel date <span class="sort-indicator" aria-hidden="true">1 ↑</span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="ItineraryOrigin" data-sort-label="route and flights">Route &amp; flights <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="Cabin" data-sort-label="cabin">Cabin <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="SeatsAvailable" data-sort-label="seats available">Seats <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="LoyaltyScheme" data-sort-label="loyalty scheme">Loyalty scheme <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="PointsPerItinerary" data-sort-label="points per passenger">Points / passenger <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="TaxesPerItinerary" data-sort-label="taxes">Taxes <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col">Select</th>
+                </tr></thead>
+                <tbody id="outbound-results-body"></tbody>
+              </table>
+              <div id="outbound-empty-state" class="empty-state" hidden><h3>No outbound flights match</h3><p>Try changing the shared search filters or outbound date.</p></div>
+            </div>
+            <nav class="pagination" aria-label="Outbound results pagination">
+              <span id="outbound-page-summary">—</span>
+              <div class="page-actions">
+                <button id="outbound-previous-page" class="button-secondary" type="button" disabled>Previous</button>
+                <button id="outbound-next-page" class="button-secondary" type="button" disabled>Next</button>
+              </div>
+            </nav>
+          </section>
+          <section class="direction-panel" aria-labelledby="inbound-heading">
+            <div class="direction-heading">
+              <h3 id="inbound-heading">Inbound</h3>
+              <fieldset class="panel-date-range">
+                <legend>Inbound dates (after outbound)</legend>
+                <label class="inbound-date-link">
+                  <input id="sync-inbound-date" type="checkbox" checked>
+                  <span>Set inbound from one day after selected outbound</span>
+                </label>
+                <label class="field panel-date-field">
+                  <span>From</span>
+                  <input id="inbound-date-from" type="date" aria-label="Inbound date from">
+                </label>
+                <label class="field panel-date-field">
+                  <span>To</span>
+                  <input id="inbound-date-to" type="date" aria-label="Inbound date to">
+                </label>
+              </fieldset>
+              <p id="inbound-selection-note" class="inbound-selection-note" aria-live="polite">
+                <span id="inbound-selection-message">Choose an outbound flight to set the inbound date minimum. Inbound may depart from a different city.</span>
+                <button id="clear-outbound-selection" class="button-secondary" type="button" hidden>Clear outbound selection</button>
+              </p>
+              <p id="inbound-count" class="result-count" aria-live="polite">Loading…</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th scope="col" aria-sort="ascending"><button class="sort-button" type="button" data-sort="TravelDate" data-sort-label="travel date">Travel date <span class="sort-indicator" aria-hidden="true">1 ↑</span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="ItineraryOrigin" data-sort-label="route and flights">Route &amp; flights <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="Cabin" data-sort-label="cabin">Cabin <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="SeatsAvailable" data-sort-label="seats available">Seats <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="LoyaltyScheme" data-sort-label="loyalty scheme">Loyalty scheme <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="PointsPerItinerary" data-sort-label="points per passenger">Points / passenger <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" aria-sort="none"><button class="sort-button" type="button" data-sort="TaxesPerItinerary" data-sort-label="taxes">Taxes <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr></thead>
+                <tbody id="inbound-results-body"></tbody>
+              </table>
+              <div id="inbound-empty-state" class="empty-state" hidden><h3>No inbound flights match</h3><p>Inbound travel must be at least one day after outbound.</p></div>
+            </div>
+            <nav class="pagination" aria-label="Inbound results pagination">
+              <span id="inbound-page-summary">—</span>
+              <div class="page-actions">
+                <button id="inbound-previous-page" class="button-secondary" type="button" disabled>Previous</button>
+                <button id="inbound-next-page" class="button-secondary" type="button" disabled>Next</button>
+              </div>
+            </nav>
+          </section>
+        </div>
+      </section>
+
+      <aside class="disclaimer">
+        <span class="disclaimer-icon" aria-hidden="true">i</span>
+        <p>Seats.aero availability is cached and may have changed. Confirm seats, points, taxes and voucher eligibility with the airline before booking.</p>
+      </aside>
+    </main>
+    <footer>Flight search · Personal award-planning tool</footer>
+  </body>
+</html>

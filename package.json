@@ -1,0 +1,14 @@
+{
+  "name": "flight-search-alert",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "search": "node --env-file=.env src/index.js",
+    "web": "node src/server.js",
+    "test": "node --test"
+  }
+}
