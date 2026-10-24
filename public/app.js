@@ -48,6 +48,7 @@ const summaryHeading = document.querySelector("#flight-summary-heading");
 const summaryDescription = document.querySelector("#flight-summary-description");
 const summaryCards = document.querySelector("#flight-summary-cards");
 const editSelection = document.querySelector("#edit-flight-selection");
+const directionTabs = [...document.querySelectorAll("[data-panel]")];
 
 const PAGE_SIZE = 50;
 const MONTHS = new Map([
@@ -267,10 +268,16 @@ function getSortValue(itinerary, key) {
   return itinerary[key] ?? "";
 }
 
-function createCell(className, text) {
-  const cell = document.createElement("td");
-  if (className) cell.className = className;
-  cell.textContent = text ?? "";
+function createFlightDetail(className, text, label, tagName = "td") {
+  const cell = document.createElement(tagName);
+  cell.className = className;
+  const caption = document.createElement("span");
+  caption.className = "detail-label";
+  caption.textContent = label;
+  const value = document.createElement("span");
+  value.className = "detail-value";
+  value.textContent = text ?? "Not available";
+  cell.append(caption, value);
   return cell;
 }
 
@@ -413,6 +420,7 @@ function renderFlightChoice(itinerary, panelName, isSelected) {
 
 function renderItinerary(itinerary, panelName) {
   const row = document.createElement("tr");
+  row.className = "flight-row";
   const details = getItineraryDetails(itinerary);
   const selectedFlight = panelName === "outbound" ? selectedOutbound : selectedInbound;
   const isSelected = Boolean(selectedFlight
@@ -426,8 +434,15 @@ function renderItinerary(itinerary, panelName) {
   dateCell.append(renderFlightChoice(itinerary, panelName, isSelected));
   row.append(dateCell);
   row.append(renderRouteCell(itinerary));
+  const times = document.createElement("td");
+  times.className = "flight-times";
+  times.append(
+    createFlightDetail("departure-time", formatUtcDateTime(itinerary.ItineraryDepartureUTC) || "Not available", "Departs", "div"),
+    createFlightDetail("arrival-time", formatUtcDateTime(itinerary.ItineraryArrivalUTC) || "Not available", "Arrives", "div"),
+  );
+  row.append(times);
 
-  const cabinCell = document.createElement("td");
+  const cabinCell = createFlightDetail("cabin-cell", "", "Cabin");
   const cabinPill = document.createElement("span");
   const cabin = itinerary.Cabin.toLowerCase();
   cabinPill.className = `cabin-pill ${["first", "business"].includes(cabin) ? cabin : ""}`;
@@ -436,17 +451,17 @@ function renderItinerary(itinerary, panelName) {
     : cabin === "premium"
       ? "Premium economy"
       : itinerary.Cabin;
-  cabinCell.append(cabinPill);
+  cabinCell.lastElementChild.append(cabinPill);
   row.append(cabinCell);
 
-  row.append(createCell("seats-cell", itinerary.SeatsAvailable));
-  row.append(createCell("loyalty-cell", itinerary.LoyaltyScheme));
+  row.append(createFlightDetail("seats-cell", itinerary.SeatsAvailable, "Available seats"));
+  row.append(createFlightDetail("loyalty-cell", itinerary.LoyaltyScheme, "Loyalty scheme"));
 
   const points = Number(itinerary.PointsPerItinerary);
-  row.append(createCell("points-cell", Number.isFinite(points) && points > 0 ? points.toLocaleString("en-GB") : "—"));
+  row.append(createFlightDetail("points-cell", Number.isFinite(points) && points > 0 ? points.toLocaleString("en-GB") : "—", "Points / passenger"));
 
   const taxesText = itinerary.TaxesPerItinerary === "" ? "—" : formatTaxes(itinerary);
-  row.append(createCell("taxes-cell", taxesText));
+  row.append(createFlightDetail("taxes-cell", taxesText, "Taxes"));
   return row;
 }
 
@@ -459,6 +474,8 @@ function renderPanel(panelName) {
   const currentRows = filtered.slice(firstIndex, firstIndex + PAGE_SIZE);
   panel.body.replaceChildren(...currentRows.map((itinerary) => renderItinerary(itinerary, panelName)));
   panel.count.textContent = `${filtered.length.toLocaleString("en-GB")} itineraries`;
+  document.querySelector(`[data-panel="${panelName}"] .tab-count`).textContent =
+    filtered.length.toLocaleString("en-GB");
   panel.summary.textContent = filtered.length === 0
     ? "No results"
     : `Showing ${firstIndex + 1}–${Math.min(firstIndex + PAGE_SIZE, filtered.length)} of ${filtered.length.toLocaleString("en-GB")}`;
@@ -470,6 +487,15 @@ function renderPanel(panelName) {
 function closeFlightSummary() {
   flightSummary.hidden = true;
   continueSelection.setAttribute("aria-expanded", "false");
+}
+
+function showDirection(panelName) {
+  for (const tab of directionTabs) {
+    const active = tab.dataset.panel === panelName;
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+    document.querySelector(`#${tab.dataset.panel}-panel`).hidden = !active;
+  }
 }
 
 function renderSelection() {
@@ -540,9 +566,8 @@ function updateSortHeaders() {
     const sortIndex = sortCriteria.findIndex(({ key }) => key === button.dataset.sort);
     const isActive = sortIndex !== -1;
     const sort = isActive ? sortCriteria[sortIndex] : null;
-    const header = button.closest("th");
     const indicator = button.querySelector(".sort-indicator");
-    header.setAttribute("aria-sort", sortIndex === 0 ? sort.direction : "none");
+    button.setAttribute("aria-pressed", String(isActive));
     indicator.textContent = isActive
       ? `${sortIndex + 1} ${sort.direction === "ascending" ? "↑" : "↓"}`
       : "";
@@ -564,6 +589,7 @@ async function loadFeature(featureId) {
   itineraries = [];
   selectedOutbound = null;
   selectedInbound = null;
+  showDirection("outbound");
   closeFlightSummary();
   synchronizeDateRanges();
   setNotice("Loading flight results…");
@@ -671,6 +697,7 @@ function synchronizeDateRanges() {
   }
 }
 for (const input of Object.values(dateInputs)) {
+  input.addEventListener("input", synchronizeDateRanges);
   input.addEventListener("change", synchronizeDateRanges);
 }
 syncInboundDateCheckbox.addEventListener("change", () => {
@@ -710,6 +737,21 @@ editSelection.addEventListener("click", () => {
   selectionBar.scrollIntoView({ block: "start" });
   continueSelection.focus({ preventScroll: true });
 });
+for (const [index, tab] of directionTabs.entries()) {
+  tab.addEventListener("click", () => showDirection(tab.dataset.panel));
+  tab.addEventListener("keydown", (event) => {
+    let targetIndex;
+    if (event.key === "ArrowRight") targetIndex = (index + 1) % directionTabs.length;
+    else if (event.key === "ArrowLeft") targetIndex = (index + directionTabs.length - 1) % directionTabs.length;
+    else if (event.key === "Home") targetIndex = 0;
+    else if (event.key === "End") targetIndex = directionTabs.length - 1;
+    else return;
+    event.preventDefault();
+    const target = directionTabs[targetIndex];
+    showDirection(target.dataset.panel);
+    target.focus();
+  });
+}
 searchInput.addEventListener("input", () => {
   pages.outbound = 0;
   pages.inbound = 0;

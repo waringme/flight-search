@@ -572,6 +572,12 @@ test("serves the frontend and exposes feature data through a local API", async (
   assert.doesNotMatch(pageHtml, /Select<\/th>/);
   assert.match(pageHtml, /id="outbound-results-body"/);
   assert.match(pageHtml, /id="inbound-results-body"/);
+  assert.match(pageHtml, /<tbody id="outbound-results-body"><\/tbody>/);
+  assert.match(pageHtml, /<tbody id="inbound-results-body"><\/tbody>/);
+  assert.match(pageHtml, /id="outbound-tab"[^>]*role="tab"/);
+  assert.match(pageHtml, /id="inbound-panel"[^>]*role="tabpanel"[^>]*hidden/);
+  assert.equal((pageHtml.match(/<table class="flight-table">/g) ?? []).length, 2);
+  assert.match(pageHtml, /aria-label="Sort flight results"/);
   for (const sortKey of [
     "TravelDate",
     "ItineraryOrigin",
@@ -588,6 +594,12 @@ test("serves the frontend and exposes feature data through a local API", async (
   assert.match(appSource, /loadFeature/);
   assert.match(appSource, /getItineraryDetails/);
   assert.match(appSource, /row\.title = details/);
+  assert.match(appSource, /row\.className = "flight-row"/);
+  assert.match(appSource, /function showDirection\(panelName\)/);
+  assert.match(appSource, /event\.key === "ArrowRight"/);
+  assert.match(appSource, /createFlightDetail\("departure-time"/);
+  assert.match(appSource, /createFlightDetail\("arrival-time"/);
+  assert.match(appSource, /button\.setAttribute\("aria-pressed", String\(isActive\)\)/);
   assert.match(appSource, /\["Points", itinerary\.PointsPerItinerary \?/);
   assert.match(appSource, /\["Taxes", formatTaxes\(itinerary\)\]/);
   assert.match(appSource, /\["Departs", formatUtcDateTime/);
@@ -596,6 +608,7 @@ test("serves the frontend and exposes feature data through a local API", async (
   assert.match(appSource, /inboundMinimum/);
   assert.match(appSource, /travelDate >= dateFrom/);
   assert.match(appSource, /travelDate <= dateTo/);
+  assert.match(appSource, /input\.addEventListener\("input", synchronizeDateRanges\)/);
   assert.match(appSource, /dateInputs\.inboundFrom\.min = inboundMinimum/);
   assert.match(appSource, /function getInboundMinimumDate\(\)/);
   assert.match(appSource, /selectedOutbound\?\.TravelDate/);
