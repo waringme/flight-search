@@ -3,9 +3,10 @@
   "framework": null,
   "functions": {
     "api/index.js": {
-      "includeFiles": "{public/**,Australia Flights*.json,North America Flights*.json,Aer Lingus Rewards*.json}",
+    "includeFiles": "{public/**,Australia Flights*.json,North America Flights*.json,Aer Lingus Rewards*.json}",
       "excludeFiles": "{history/**,test/**,.env,.env.*}"
     }
+
   },
   "rewrites": [
     {
