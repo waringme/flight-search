@@ -170,3 +170,64 @@ test("streams an empty export as an empty rows array", async (context) => {
     rows: [],
   });
 });
+
+test("serves R2 data and metadata without reading bundled local results", async (context) => {
+  const requests = [];
+  const baseUrl = await startServer(context, createRequestHandler({
+    projectRoot: createFixture(context),
+    resultsBaseUrl: "https://data.example.com/",
+    fetchImpl: async (url) => {
+      requests.push(url.pathname);
+      if (url.pathname === "/current.json") {
+        return new Response(JSON.stringify({ prefix: "runs/456-1/" }));
+      }
+      return new Response(JSON.stringify(url.pathname.endsWith(".meta.json")
+        ? { rateLimitRemaining: 777 }
+        : [{ ...row, Notes: "from R2" }]));
+    },
+  }));
+  const features = await fetch(`${baseUrl}/api/features`);
+  assert.equal(features.status, 200);
+  assert.equal((await features.json()).features.length, 3);
+  for (const id of ["australia-flights", "north-america-flights", "aer-lingus-rewards"]) {
+    const response = await fetch(`${baseUrl}/api/features/${id}/results`);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.rows[0].Notes, "from R2");
+    assert.equal(result.rateLimitRemaining, 777);
+  }
+  assert.equal(requests.filter((url) => url === "/current.json").length, 4);
+  assert.ok(requests.every((url) => url === "/current.json" || url.startsWith("/runs/456-1/")));
+});
+
+test("R2 supports quarterly exports when combined results are absent", async (context) => {
+  const baseUrl = await startServer(context, createRequestHandler({
+    resultsBaseUrl: "https://data.example.com/",
+    fetchImpl: async (url) => {
+      if (url.pathname === "/current.json") {
+        return new Response(JSON.stringify({ prefix: "runs/456-1/" }));
+      }
+      if (url.pathname.endsWith("Flights.json")) return new Response("", { status: 404 });
+      return new Response(JSON.stringify(url.pathname.endsWith(".meta.json")
+        ? { quarterlyChunks: [{ file: "North America Flights 2026-Q4.json", rows: 1 }] }
+        : [row]));
+    },
+  }));
+  const response = await fetch(`${baseUrl}/api/features/north-america-flights/results`);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).rows, [row]);
+});
+
+test("R2 failures surface as errors rather than falling back to bundled stale data", async (context) => {
+  context.mock.method(console, "error", () => {});
+  const baseUrl = await startServer(context, createRequestHandler({
+    projectRoot: createFixture(context),
+    resultsBaseUrl: "https://data.example.com/",
+    fetchImpl: async () => new Response("", { status: 503 }),
+  }));
+  for (const route of ["/api/features", "/api/features/australia-flights/results"]) {
+    const response = await fetch(`${baseUrl}${route}`);
+    assert.equal(response.status, 500);
+    assert.match((await response.json()).error, /Could not load/);
+  }
+});

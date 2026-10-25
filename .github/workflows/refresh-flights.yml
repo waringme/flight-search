@@ -1,0 +1,83 @@
+name: Refresh and upload flight results
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "package.json"
+      - ".github/workflows/refresh-flights.yml"
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-flight-results
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run tests
+        run: npm test
+
+      - name: Check publishing secrets
+        env:
+          SEATS_AERO_API_KEY: ${{ secrets.SEATS_AERO_API_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SEATS_AERO_API_KEY" || { echo "::error::Missing SEATS_AERO_API_KEY secret"; exit 1; }
+          test -n "$R2_ACCOUNT_ID" || { echo "::error::Missing R2_ACCOUNT_ID secret"; exit 1; }
+          test -n "$R2_BUCKET" || { echo "::error::Missing R2_BUCKET secret"; exit 1; }
+          test -n "$R2_ACCESS_KEY_ID" || { echo "::error::Missing R2_ACCESS_KEY_ID secret"; exit 1; }
+          test -n "$R2_SECRET_ACCESS_KEY" || { echo "::error::Missing R2_SECRET_ACCESS_KEY secret"; exit 1; }
+
+      - name: Fetch fresh flight results
+        env:
+          SEATS_AERO_API_KEY: ${{ secrets.SEATS_AERO_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/flight-results"
+          cd "$RUNNER_TEMP/flight-results"
+          node "$GITHUB_WORKSPACE/src/index.js"
+
+      - name: Upload JSON and publish completed scan
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          set -euo pipefail
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          prefix="runs/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/"
+          aws s3 cp "$RUNNER_TEMP/flight-results/" "s3://${R2_BUCKET}/${prefix}" \
+            --endpoint-url "$endpoint" --recursive \
+            --exclude "*" --include "*.json" --exclude "history/*" \
+            --content-type "application/json" \
+            --cache-control "public, max-age=31536000, immutable" --only-show-errors
+          printf '{"prefix":"%s"}\n' "$prefix" > "$RUNNER_TEMP/current.json"
+          aws s3 cp "$RUNNER_TEMP/current.json" "s3://${R2_BUCKET}/current.json" \
+            --endpoint-url "$endpoint" --content-type "application/json" \
+            --cache-control "no-store" --only-show-errors

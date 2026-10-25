@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { createResultReader } from "./result-storage.js";
 import {
   AER_LINGUS_REWARDS_SEARCH,
   AUSTRALIA_FLIGHTS_SEARCH,
@@ -174,13 +175,13 @@ function parseResultRows(content, filename) {
   return rows;
 }
 
-async function readFeatureRows(feature, projectRoot) {
+async function readFeatureRows(feature, readResultFile) {
   try {
-    const content = await readFile(path.join(projectRoot, feature.outputFile), "utf8");
+    const content = await readResultFile(feature.outputFile);
     return parseResultRows(content, feature.outputFile);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
-    const metadata = await readFeatureMetadata(feature, projectRoot);
+    const metadata = await readFeatureMetadata(feature, readResultFile);
     if (!Array.isArray(metadata.quarterlyChunks) || metadata.quarterlyChunks.length === 0) {
       throw error;
     }
@@ -189,7 +190,7 @@ async function readFeatureRows(feature, projectRoot) {
         || !chunk.file.endsWith(".json") || !Number.isInteger(chunk.rows) || chunk.rows < 0) {
         throw new Error(`Invalid quarterly JSON chunk for ${feature.name}.`);
       }
-      const content = await readFile(path.join(projectRoot, chunk.file), "utf8");
+      const content = await readResultFile(chunk.file);
       const rows = parseResultRows(content, chunk.file);
       if (rows.length !== chunk.rows) {
         throw new Error(`Quarterly JSON row count mismatch: ${chunk.file}.`);
@@ -200,9 +201,9 @@ async function readFeatureRows(feature, projectRoot) {
   }
 }
 
-async function readFeatureMetadata(feature, projectRoot) {
+async function readFeatureMetadata(feature, readResultFile) {
   try {
-    return JSON.parse(await readFile(path.join(projectRoot, feature.metadataFile), "utf8"));
+    return JSON.parse(await readResultFile(feature.metadataFile));
   } catch (error) {
     if (error.code === "ENOENT") return {};
     throw error;
@@ -240,7 +241,11 @@ function sendError(response, statusCode, message) {
   sendJson(response, statusCode, { error: message });
 }
 
-export function createRequestHandler({ projectRoot = PROJECT_ROOT } = {}) {
+export function createRequestHandler({
+  projectRoot = PROJECT_ROOT,
+  resultsBaseUrl = process.env.FLIGHT_RESULTS_BASE_URL,
+  fetchImpl = fetch,
+} = {}) {
   return async (request, response) => {
     if (request.method !== "GET") {
       response.setHeader("Allow", "GET");
@@ -251,9 +256,10 @@ export function createRequestHandler({ projectRoot = PROJECT_ROOT } = {}) {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
     if (requestUrl.pathname === "/api/features") {
       try {
+        const readResultFile = await createResultReader({ projectRoot, resultsBaseUrl, fetchImpl });
         const features = await Promise.all(
           FEATURE_REGISTRY.map(async (feature) => {
-            const rows = await readFeatureRows(feature, projectRoot);
+            const rows = await readFeatureRows(feature, readResultFile);
             return {
               id: feature.id,
               name: feature.name,
@@ -278,9 +284,10 @@ export function createRequestHandler({ projectRoot = PROJECT_ROOT } = {}) {
       }
 
       try {
+        const readResultFile = await createResultReader({ projectRoot, resultsBaseUrl, fetchImpl });
         const [rows, metadata] = await Promise.all([
-          readFeatureRows(feature, projectRoot),
-          readFeatureMetadata(feature, projectRoot),
+          readFeatureRows(feature, readResultFile),
+          readFeatureMetadata(feature, readResultFile),
         ]);
         await sendResults(response, {
           feature: { id: feature.id, name: feature.name },

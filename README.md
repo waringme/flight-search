@@ -1,6 +1,6 @@
 # Flight search alert
 
-A small, manual Seats.aero scanner for award availability from the UK and European gateways to eastern Australia. It reports:
+A small Seats.aero scanner for award availability from the UK and European gateways to eastern Australia, run manually or on a GitHub Actions schedule. It reports:
 
 - first-class award seats (`FRemainingSeats > 0`);
 - business-cabin award seats (`JRemainingSeats > 0`); and
@@ -47,9 +47,39 @@ Use the repository root as the Vercel project root and the **Other** framework p
 
 The function bundles `public/` and the root-level flight JSON and metadata files. It does not read `history/`. Commit `Australia Flights.json`, the quarterly North America and Aer Lingus JSON files listed in their metadata, and the corresponding root-level `.meta.json` files. When a combined JSON file is absent, the server loads the quarterly files from its metadata and checks their row counts. Missing or invalid data is reported as an error, not as empty search results. The viewer reads JSON arrays, not legacy CSV exports.
 
-The deployed app is a read-only viewer of these saved results. Run searches locally and commit updated exports to refresh the deployment; no Seats.aero API key is needed by the web function. Do not commit `.env` or configure a deployment command that runs `npm run search`.
+The deployed app is a read-only viewer of these saved results. By default it reads bundled exports; alternatively, configure the R2 source below to refresh data without committing exports or redeploying the viewer. No Seats.aero API key or R2 upload credentials are needed by the web function. Do not commit `.env` or configure a deployment command that runs `npm run search`.
 
 The results endpoints stream their JSON responses in batches to avoid Vercel's buffered-response size limit. The browser still receives the same complete JSON object and keeps its existing filtering and pagination behaviour.
+
+## Scheduled refreshes with GitHub Actions and Cloudflare R2
+
+`.github/workflows/refresh-flights.yml` runs daily at **02:00 UTC**, can be started with **Actions → Refresh and upload flight results → Run workflow**, and runs on pushes to `main` that change the scanner/server source, package manifest, or workflow. Scheduled runs use the workflow on the default branch and can be delayed by GitHub. Change the `cron` expression to adjust the time.
+
+Create an R2 bucket and enable public read access through a custom domain (recommended for production) or the `r2.dev` development URL. Use the public bucket URL, not the authenticated `r2.cloudflarestorage.com` S3 endpoint. The exported flight data will be publicly readable; never put credentials or private files in this bucket.
+
+In the GitHub repository's **Settings → Secrets and variables → Actions**, add these repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `SEATS_AERO_API_KEY` | Seats.aero API key used by the scanner |
+| `R2_ACCOUNT_ID` | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | R2 S3 API access key ID |
+| `R2_SECRET_ACCESS_KEY` | R2 S3 API secret access key |
+| `R2_BUCKET` | Destination bucket name |
+
+Create an R2 API token with **Object Read & Write** access scoped to this bucket. The workflow checks configuration, runs the scanner in an empty temporary directory, and uses the runner's AWS CLI to upload only generated root-level JSON, including metadata and quarterly chunks. It does not upload `.env`, source code, or `history/`, and it does not commit generated data back to GitHub. There is no `npm ci` or npm cache step because this project has no dependencies or lockfile.
+
+Each run uploads under `runs/<run-id>-<attempt>/`. Only after the complete upload succeeds does it replace `current.json` with that run's prefix. Failed scans/uploads leave the previous published dataset selected. Completed runs are immutable; retain the folder referenced by `current.json` when cleaning up older runs. Do not apply a Cloudflare cache rule that overrides the pointer's `Cache-Control: no-store` header.
+
+Set **`FLIGHT_RESULTS_BASE_URL`** in your web host's environment to the public bucket URL, for example `https://flights-data.example.com/`, and redeploy once to pick up this configuration. The web server resolves `current.json` once per API request and reads all files for that request from the same published run. Subsequent scheduled refreshes need no app redeployment. Invalid or unreachable remote data is reported as an error, never silently replaced with stale bundled data. Public data is fetched server-side, so browser CORS configuration is not required.
+
+For a local viewer using R2, explicitly pass the variable to the web process:
+
+```sh
+FLIGHT_RESULTS_BASE_URL=https://flights-data.example.com/ npm run web
+```
+
+Omit `FLIGHT_RESULTS_BASE_URL` to keep using local JSON files. `npm run web` does not automatically load `.env`; the scanner's `npm run search` command does. Before enabling R2 for the viewer, complete the first successful workflow run and confirm `<public-bucket-url>/current.json` is accessible.
 
 ## Search configuration
 
