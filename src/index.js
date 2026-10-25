@@ -2,7 +2,7 @@ import {
   AER_LINGUS_REWARDS_SEARCH,
   AUSTRALIA_FLIGHTS_SEARCH,
   NORTH_AMERICA_FLIGHTS_SEARCH,
-  writeFlightResultsCsv,
+  writeFlightResultsJson,
 } from "./flight-results-csv.js";
 
 const API_BASE_URL = "https://seats.aero";
@@ -330,7 +330,7 @@ async function runAerLingusSearch({
     }),
   );
   const searchDate = generatedAt.toISOString().slice(0, 10);
-  const exportResult = writeFlightResultsCsv(
+  const exportResult = writeFlightResultsJson(
     { aerLingusSearches },
     searchDate,
     AER_LINGUS_REWARDS_SEARCH,
@@ -378,7 +378,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
       searched: { startDate: options.startDate, endDate: options.endDate },
       rateLimitRemaining: aerLingusResult.rateLimit.remaining,
       searches: aerLingusResult.aerLingusSearches.map(summarizeSearch),
-      csvExport: {
+      jsonExport: {
         file: AER_LINGUS_REWARDS_SEARCH.outputFile,
         historyFile: aerLingusResult.exportResult.historyPath,
         timestamp: aerLingusResult.exportResult.timestamp,
@@ -616,7 +616,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
   const metadata = {
     rateLimitRemaining: rateLimit.remaining,
   };
-  const exportResult = writeFlightResultsCsv(
+  const exportResult = writeFlightResultsJson(
     searchResults,
     searchDate,
     AUSTRALIA_FLIGHTS_SEARCH,
@@ -624,7 +624,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
     new Date(),
     metadata,
   );
-  const northAmericaExport = writeFlightResultsCsv(
+  const northAmericaExport = writeFlightResultsJson(
     searchResults,
     searchDate,
     NORTH_AMERICA_FLIGHTS_SEARCH,
@@ -632,7 +632,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
     new Date(),
     metadata,
   );
-  const aerLingusExport = writeFlightResultsCsv(
+  const aerLingusExport = writeFlightResultsJson(
     searchResults,
     searchDate,
     AER_LINGUS_REWARDS_SEARCH,
@@ -667,7 +667,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
     aerLingusSearches: aerLingusSearches.map((search) => ({
       ...summarizeSearch(search),
     })),
-    csvExport: {
+    jsonExport: {
       file: AUSTRALIA_FLIGHTS_SEARCH.outputFile,
       historyFile: exportResult.historyPath,
       timestamp: exportResult.timestamp,
@@ -675,7 +675,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
       searchDate,
       rateLimitRemaining: rateLimit.remaining,
     },
-    northAmericaCsvExport: {
+    northAmericaJsonExport: {
       file: NORTH_AMERICA_FLIGHTS_SEARCH.outputFile,
       historyFile: northAmericaExport.historyPath,
       timestamp: northAmericaExport.timestamp,
@@ -683,7 +683,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
       searchDate,
       rateLimitRemaining: rateLimit.remaining,
     },
-    aerLingusCsvExport: {
+    aerLingusJsonExport: {
       file: AER_LINGUS_REWARDS_SEARCH.outputFile,
       historyFile: aerLingusExport.historyPath,
       timestamp: aerLingusExport.timestamp,

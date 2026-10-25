@@ -4,21 +4,21 @@ import path from "node:path";
 export const AUSTRALIA_FLIGHTS_SEARCH = Object.freeze({
   id: "australia-flights",
   name: "Australia Flights",
-  outputFile: "Australia Flights.csv",
+  outputFile: "Australia Flights.json",
   metadataFile: "Australia Flights.meta.json",
 });
 
 export const NORTH_AMERICA_FLIGHTS_SEARCH = Object.freeze({
   id: "north-america-flights",
   name: "North America Flights",
-  outputFile: "North America Flights.csv",
+  outputFile: "North America Flights.json",
   metadataFile: "North America Flights.meta.json",
 });
 
 export const AER_LINGUS_REWARDS_SEARCH = Object.freeze({
   id: "aer-lingus-rewards",
   name: "Aer Lingus Rewards",
-  outputFile: "Aer Lingus Rewards.csv",
+  outputFile: "Aer Lingus Rewards.json",
   metadataFile: "Aer Lingus Rewards.meta.json",
 });
 
@@ -246,7 +246,7 @@ export function createFlightResultsCsv(searchResults, searchDate, feature = AUST
   return { csv: serializeCsv(rows), rowCount: rows.length };
 }
 
-export function writeFlightResultsCsv(
+export function writeFlightResultsJson(
   searchResults,
   searchDate,
   feature = AUSTRALIA_FLIGHTS_SEARCH,
@@ -255,7 +255,7 @@ export function writeFlightResultsCsv(
   metadata = {},
 ) {
   const rows = collectRows(searchResults, { feature, searchDate });
-  const csv = serializeCsv(rows);
+  const json = `${JSON.stringify(rows)}\n`;
   const rowCount = rows.length;
   const outputPath = path.resolve(outputDirectory, feature.outputFile);
   const timestamp = generatedAt.toISOString()
@@ -264,7 +264,7 @@ export function writeFlightResultsCsv(
   const historyDirectory = path.resolve(outputDirectory, "history");
   const historyPath = path.join(
     historyDirectory,
-    `${path.basename(feature.outputFile, path.extname(feature.outputFile))} ${timestamp}.csv`,
+    `${path.basename(feature.outputFile, path.extname(feature.outputFile))} ${timestamp}.json`,
   );
   const quarterlyRows = new Map();
   if (
@@ -280,9 +280,9 @@ export function writeFlightResultsCsv(
     }
   }
   const chunkFiles = [...quarterlyRows].map(([quarter, chunkRows]) => ({
-    file: `${path.basename(feature.outputFile, path.extname(feature.outputFile))} ${quarter}.csv`,
+    file: `${path.basename(feature.outputFile, path.extname(feature.outputFile))} ${quarter}.json`,
     rows: chunkRows.length,
-    csv: serializeCsv(chunkRows),
+    json: `${JSON.stringify(chunkRows)}\n`,
   }));
   const chunkMetadata = chunkFiles.length
     ? {
@@ -302,12 +302,12 @@ export function writeFlightResultsCsv(
   );
 
   mkdirSync(historyDirectory, { recursive: true });
-  writeFileSync(historyPath, csv, { encoding: "utf8", flag: "wx" });
+  writeFileSync(historyPath, json, { encoding: "utf8", flag: "wx" });
   writeFileSync(historyMetadataPath, metadataContent, { encoding: "utf8", flag: "wx" });
-  writeFileSync(outputPath, csv, "utf8");
+  writeFileSync(outputPath, json, "utf8");
   writeFileSync(currentMetadataPath, metadataContent, "utf8");
   for (const chunk of chunkFiles) {
-    writeFileSync(path.resolve(outputDirectory, chunk.file), chunk.csv, "utf8");
+    writeFileSync(path.resolve(outputDirectory, chunk.file), chunk.json, "utf8");
   }
   return {
     outputPath,

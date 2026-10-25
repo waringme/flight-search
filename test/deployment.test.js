@@ -7,8 +7,14 @@ import path from "node:path";
 import handler from "../api/index.js";
 import { createRequestHandler } from "../src/server.js";
 
-const headers = "SearchDate,SearchDirection,ResultSet,LoyaltyScheme,Cabin,Notes\n";
-const row = "2026-10-24,Europe to North America,BA loyalty search,BA Executive Club (Avios),Business,";
+const row = {
+  SearchDate: "2026-10-24",
+  SearchDirection: "Europe to North America",
+  ResultSet: "BA loyalty search",
+  LoyaltyScheme: "BA Executive Club (Avios)",
+  Cabin: "Business",
+  Notes: "saved",
+};
 
 async function startServer(context, requestHandler) {
   const server = createServer(requestHandler);
@@ -23,7 +29,7 @@ function createFixture(context) {
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), "flight-deployment-"));
   context.after(() => rmSync(projectRoot, { recursive: true, force: true }));
   for (const name of ["Australia Flights", "North America Flights", "Aer Lingus Rewards"]) {
-    writeFileSync(path.join(projectRoot, `${name}.csv`), `${headers}${row}saved\n`);
+    writeFileSync(path.join(projectRoot, `${name}.json`), JSON.stringify([row]));
   }
   return projectRoot;
 }
@@ -49,19 +55,20 @@ test("Vercel configuration routes requests to the function and bundles saved dat
   const config = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
   assert.equal(config.framework, null);
   assert.deepEqual(config.rewrites, [{ source: "/(.*)", destination: "/api/index" }]);
-  assert.equal(config.functions["api/index.js"].includeFiles, "{public/**,*.csv,*.meta.json}");
+  assert.equal(config.functions["api/index.js"].includeFiles,
+    "{public/**,Australia Flights*.json,North America Flights*.json,Aer Lingus Rewards*.json}");
   assert.equal(config.functions["api/index.js"].excludeFiles, "{history/**,test/**,.env,.env.*}");
 });
 
-test("loads committed quarterly CSVs when the combined export is missing", async (context) => {
+test("loads committed quarterly JSON when the combined export is missing", async (context) => {
   const projectRoot = createFixture(context);
-  rmSync(path.join(projectRoot, "North America Flights.csv"));
+  rmSync(path.join(projectRoot, "North America Flights.json"));
   const quarterlyChunks = [
-    { file: "North America Flights 2026-Q4.csv", rows: 1 },
-    { file: "North America Flights 2027-Q1.csv", rows: 1 },
+    { file: "North America Flights 2026-Q4.json", rows: 1 },
+    { file: "North America Flights 2027-Q1.json", rows: 1 },
   ];
-  writeFileSync(path.join(projectRoot, quarterlyChunks[0].file), `${headers}${row}"first, ""quoted"""\n`);
-  writeFileSync(path.join(projectRoot, quarterlyChunks[1].file), `${headers}${row}second\n`);
+  writeFileSync(path.join(projectRoot, quarterlyChunks[0].file), JSON.stringify([{ ...row, Notes: 'first, "quoted"' }]));
+  writeFileSync(path.join(projectRoot, quarterlyChunks[1].file), JSON.stringify([{ ...row, Notes: "second" }]));
   writeFileSync(path.join(projectRoot, "North America Flights.meta.json"), JSON.stringify({
     rateLimitRemaining: 738,
     quarterlyChunks,
@@ -79,10 +86,10 @@ test("loads committed quarterly CSVs when the combined export is missing", async
   assert.equal(result.feature.id, "north-america-flights");
 });
 
-test("prefers the current combined CSV over older quarterly exports", async (context) => {
+test("prefers the current combined JSON over older quarterly exports", async (context) => {
   const projectRoot = createFixture(context);
   writeFileSync(path.join(projectRoot, "North America Flights.meta.json"), JSON.stringify({
-    quarterlyChunks: [{ file: "missing-quarter.csv", rows: 1 }],
+    quarterlyChunks: [{ file: "missing-quarter.json", rows: 1 }],
   }));
   const baseUrl = await startServer(context, createRequestHandler({ projectRoot }));
   const response = await fetch(`${baseUrl}/api/features/north-america-flights/results`);
@@ -92,19 +99,19 @@ test("prefers the current combined CSV over older quarterly exports", async (con
 
 test("reports missing, malformed, or incomplete quarterly data as errors", async (context) => {
   const projectRoot = createFixture(context);
-  rmSync(path.join(projectRoot, "North America Flights.csv"));
+  rmSync(path.join(projectRoot, "North America Flights.json"));
   const baseUrl = await startServer(context, createRequestHandler({ projectRoot }));
   const metadataPath = path.join(projectRoot, "North America Flights.meta.json");
-  const chunkFile = "North America Flights 2026-Q4.csv";
-  writeFileSync(path.join(projectRoot, chunkFile), `${headers}${row}saved\n`);
+  const chunkFile = "North America Flights 2026-Q4.json";
+  writeFileSync(path.join(projectRoot, chunkFile), JSON.stringify([row]));
   const messages = [];
   context.mock.method(console, "error", (...args) => messages.push(args));
   for (const metadata of [
     {},
     { quarterlyChunks: [] },
-    { quarterlyChunks: [{ file: "missing.csv", rows: 1 }] },
+    { quarterlyChunks: [{ file: "missing.json", rows: 1 }] },
     { quarterlyChunks: [{ file: chunkFile, rows: 2 }] },
-    { quarterlyChunks: [{ file: "../outside.csv", rows: 1 }] },
+    { quarterlyChunks: [{ file: "../outside.json", rows: 1 }] },
   ]) {
     writeFileSync(metadataPath, JSON.stringify(metadata));
     const response = await fetch(`${baseUrl}/api/features/north-america-flights/results`);
@@ -121,8 +128,8 @@ test("reports missing, malformed, or incomplete quarterly data as errors", async
 test("streams large results as valid JSON without changing the response shape", async (context) => {
   const projectRoot = createFixture(context);
   const notes = "x".repeat(10000);
-  writeFileSync(path.join(projectRoot, "Australia Flights.csv"),
-    `${headers}${`${row}${notes}\n`.repeat(600)}`);
+  writeFileSync(path.join(projectRoot, "Australia Flights.json"),
+    JSON.stringify(Array.from({ length: 600 }, () => ({ ...row, Notes: notes }))));
   const baseUrl = await startServer(context, createRequestHandler({ projectRoot }));
   const response = await fetch(`${baseUrl}/api/features/australia-flights/results`);
   assert.equal(response.status, 200);
@@ -136,9 +143,23 @@ test("streams large results as valid JSON without changing the response shape", 
   assert.ok(result.rows.every((item) => item.Notes === notes));
 });
 
+test("reports malformed combined JSON without falling back to stale chunks", async (context) => {
+  const projectRoot = createFixture(context);
+  const baseUrl = await startServer(context, createRequestHandler({ projectRoot }));
+  const messages = [];
+  context.mock.method(console, "error", (...args) => messages.push(args));
+  for (const content of ["{invalid", "{}", "[null]", '[{"SearchDate":"2026-10-24"}]']) {
+    writeFileSync(path.join(projectRoot, "Australia Flights.json"), content);
+    const response = await fetch(`${baseUrl}/api/features/australia-flights/results`);
+    assert.equal(response.status, 500);
+    assert.match((await response.json()).error, /JSON files are valid and exist/);
+  }
+  assert.equal(messages.length, 4);
+});
+
 test("streams an empty export as an empty rows array", async (context) => {
   const projectRoot = createFixture(context);
-  writeFileSync(path.join(projectRoot, "Australia Flights.csv"), headers);
+  writeFileSync(path.join(projectRoot, "Australia Flights.json"), "[]");
   const baseUrl = await startServer(context, createRequestHandler({ projectRoot }));
   const response = await fetch(`${baseUrl}/api/features/australia-flights/results`);
   assert.equal(response.status, 200);

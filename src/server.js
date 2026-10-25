@@ -161,10 +161,23 @@ function createSearchTypes(rows, feature) {
   return [...types, ...upgradeTypes].sort((left, right) => left.label.localeCompare(right.label));
 }
 
+function parseResultRows(content, filename) {
+  const rows = JSON.parse(content);
+  if (!Array.isArray(rows) || rows.some((row) =>
+    !row || typeof row !== "object" || Array.isArray(row)
+    || !["SearchDate", "SearchDirection", "ResultSet", "LoyaltyScheme"].every(
+      (key) => typeof row[key] === "string",
+    )
+  )) {
+    throw new Error(`Invalid flight results JSON: ${filename}. Expected an array of flight rows.`);
+  }
+  return rows;
+}
+
 async function readFeatureRows(feature, projectRoot) {
   try {
     const content = await readFile(path.join(projectRoot, feature.outputFile), "utf8");
-    return parseCsv(content);
+    return parseResultRows(content, feature.outputFile);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     const metadata = await readFeatureMetadata(feature, projectRoot);
@@ -172,13 +185,14 @@ async function readFeatureRows(feature, projectRoot) {
       throw error;
     }
     const chunks = await Promise.all(metadata.quarterlyChunks.map(async (chunk) => {
-      if (typeof chunk.file !== "string" || path.basename(chunk.file) !== chunk.file) {
-        throw new Error(`Invalid quarterly CSV filename for ${feature.name}.`);
+      if (typeof chunk.file !== "string" || path.basename(chunk.file) !== chunk.file
+        || !chunk.file.endsWith(".json") || !Number.isInteger(chunk.rows) || chunk.rows < 0) {
+        throw new Error(`Invalid quarterly JSON chunk for ${feature.name}.`);
       }
       const content = await readFile(path.join(projectRoot, chunk.file), "utf8");
-      const rows = parseCsv(content);
+      const rows = parseResultRows(content, chunk.file);
       if (rows.length !== chunk.rows) {
-        throw new Error(`Quarterly CSV row count mismatch: ${chunk.file}.`);
+        throw new Error(`Quarterly JSON row count mismatch: ${chunk.file}.`);
       }
       return rows;
     }));
@@ -250,7 +264,7 @@ export function createRequestHandler({ projectRoot = PROJECT_ROOT } = {}) {
         sendJson(response, 200, { features });
       } catch (error) {
         console.error("Unable to load search feature list:", error);
-        sendError(response, 500, "Could not load search features. Check that their CSV files exist.");
+        sendError(response, 500, "Could not load search features. Check that their JSON files are valid and exist.");
       }
       return;
     }
@@ -278,7 +292,7 @@ export function createRequestHandler({ projectRoot = PROJECT_ROOT } = {}) {
         if (response.headersSent || response.destroyed) {
           response.destroy(error);
         } else {
-          sendError(response, 500, `Could not load ${feature.name} results. Check that its CSV file exists.`);
+          sendError(response, 500, `Could not load ${feature.name} results. Check that its JSON files are valid and exist.`);
         }
       }
       return;

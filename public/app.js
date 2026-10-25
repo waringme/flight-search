@@ -623,7 +623,7 @@ async function initialize() {
     const selectedFeature = featureRegistry[0];
     if (!selectedFeature) {
       for (const panel of Object.values(resultPanels)) panel.count.textContent = "No search features";
-      setNotice("Add a search feature and its CSV to the feature registry.", true);
+      setNotice("Add a search feature and its JSON results to the feature registry.", true);
       return;
     }
     populateTypeSelect(selectedFeature);

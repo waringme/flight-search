@@ -1,19 +1,19 @@
 {
-  "generatedAt": "2026-10-24T11:09:57.772Z",
-  "searchDate": "2026-10-24",
-  "rateLimitRemaining": 526,
+  "generatedAt": "2026-10-25T18:18:16.711Z",
+  "searchDate": "2026-10-25",
+  "rateLimitRemaining": 828,
   "quarterlyChunks": [
     {
       "file": "Aer Lingus Rewards 2026-Q4.json",
-      "rows": 673
+      "rows": 674
     },
     {
       "file": "Aer Lingus Rewards 2027-Q1.json",
-      "rows": 127
+      "rows": 135
     },
     {
       "file": "Aer Lingus Rewards 2027-Q3.json",
-      "rows": 4
+      "rows": 3
     }
   ]
 }

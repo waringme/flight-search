@@ -8,7 +8,7 @@ import {
   AUSTRALIA_FLIGHTS_SEARCH,
   createFlightResultsCsv,
   NORTH_AMERICA_FLIGHTS_SEARCH,
-  writeFlightResultsCsv,
+  writeFlightResultsJson,
 } from "../src/flight-results-csv.js";
 import { createAppServer, parseCsv } from "../src/server.js";
 import {
@@ -143,8 +143,8 @@ test("runs and exports only Aer Lingus partner searches", async (context) => {
   assert.equal(result.aerLingusSearches.length, 12);
   assert.equal(result.rateLimit.remaining, 990);
   assert.equal(result.exportResult.rowCount, 12);
-  assert.ok(readdirSync(outputDirectory).includes("Aer Lingus Rewards.csv"));
-  assert.ok(readdirSync(outputDirectory).includes("Aer Lingus Rewards 2027-Q2.csv"));
+  assert.ok(readdirSync(outputDirectory).includes("Aer Lingus Rewards.json"));
+  assert.ok(readdirSync(outputDirectory).includes("Aer Lingus Rewards 2027-Q2.json"));
   assert.ok(readdirSync(outputDirectory).includes("Aer Lingus Rewards.meta.json"));
   assert.ok(readdirSync(outputDirectory).includes("history"));
 });
@@ -317,7 +317,7 @@ test("exports each itinerary flight segment under a named search feature", () =>
   assert.match(lines[3], /,2,EK408,EK,DXB,MEL,/);
   assert.match(lines[2], /,182900,1078\.54,107854,EUR,/);
   assert.match(lines[4], /,Europe to Asia,BA loyalty search,BA Executive Club \(Avios\),british,BA,business,2,/);
-  assert.equal(AUSTRALIA_FLIGHTS_SEARCH.outputFile, "Australia Flights.csv");
+  assert.equal(AUSTRALIA_FLIGHTS_SEARCH.outputFile, "Australia Flights.json");
 });
 
 test("exports Aer Lingus-operated awards by partner program", () => {
@@ -348,10 +348,10 @@ test("exports Aer Lingus-operated awards by partner program", () => {
     }],
   }, "2026-10-24", AER_LINGUS_REWARDS_SEARCH);
   assert.equal(result.rowCount, 0);
-  assert.equal(AER_LINGUS_REWARDS_SEARCH.outputFile, "Aer Lingus Rewards.csv");
+  assert.equal(AER_LINGUS_REWARDS_SEARCH.outputFile, "Aer Lingus Rewards.json");
 });
 
-test("writes Aer Lingus results in separate calendar-quarter CSVs", (context) => {
+test("writes Aer Lingus results in separate calendar-quarter JSON files", (context) => {
   const outputDirectory = mkdtempSync(path.join(os.tmpdir(), "aer-lingus-quarterly-"));
   context.after(() => rmSync(outputDirectory, { recursive: true, force: true }));
   const records = ["2026-10-24", "2026-12-31", "2027-01-01"].map((date, index) => ({
@@ -368,7 +368,7 @@ test("writes Aer Lingus results in separate calendar-quarter CSVs", (context) =>
       RemainingSeats: 1,
     }],
   }));
-  const result = writeFlightResultsCsv({
+  const result = writeFlightResultsJson({
     aerLingusSearches: [{
       scheme: "United",
       direction: "Europe to Americas",
@@ -379,18 +379,18 @@ test("writes Aer Lingus results in separate calendar-quarter CSVs", (context) =>
   }, "2026-10-24", AER_LINGUS_REWARDS_SEARCH, outputDirectory, new Date("2026-10-24T10:00:00.000Z"));
 
   assert.deepEqual(result.chunkFiles.map(({ file, rows }) => [path.basename(file), rows]), [
-    ["Aer Lingus Rewards 2026-Q4.csv", 2],
-    ["Aer Lingus Rewards 2027-Q1.csv", 1],
+    ["Aer Lingus Rewards 2026-Q4.json", 2],
+    ["Aer Lingus Rewards 2027-Q1.json", 1],
   ]);
-  const q4 = parseCsv(readFileSync(path.join(outputDirectory, "Aer Lingus Rewards 2026-Q4.csv"), "utf8"));
-  const q1 = parseCsv(readFileSync(path.join(outputDirectory, "Aer Lingus Rewards 2027-Q1.csv"), "utf8"));
+  const q4 = JSON.parse(readFileSync(path.join(outputDirectory, "Aer Lingus Rewards 2026-Q4.json"), "utf8"));
+  const q1 = JSON.parse(readFileSync(path.join(outputDirectory, "Aer Lingus Rewards 2027-Q1.json"), "utf8"));
   assert.deepEqual(q4.map((row) => row.TravelDate), ["24-Oct-2026", "31-Dec-2026"]);
   assert.deepEqual(q1.map((row) => row.TravelDate), ["01-Jan-2027"]);
   const metadata = JSON.parse(readFileSync(path.join(outputDirectory, "Aer Lingus Rewards.meta.json"), "utf8"));
   assert.equal(metadata.quarterlyChunks.length, 2);
 });
 
-test("writes North America results in separate calendar-quarter CSVs", (context) => {
+test("writes North America results in separate calendar-quarter JSON files", (context) => {
   const outputDirectory = mkdtempSync(path.join(os.tmpdir(), "north-america-quarterly-"));
   context.after(() => rmSync(outputDirectory, { recursive: true, force: true }));
   const records = ["2026-10-24", "2027-01-01"].map((date, index) => ({
@@ -407,7 +407,7 @@ test("writes North America results in separate calendar-quarter CSVs", (context)
       RemainingSeats: 1,
     }],
   }));
-  const result = writeFlightResultsCsv({
+  const result = writeFlightResultsJson({
     northAmericaSearches: [{
       scheme: "BA",
       direction: "Europe to North America",
@@ -417,21 +417,21 @@ test("writes North America results in separate calendar-quarter CSVs", (context)
   }, "2026-10-24", NORTH_AMERICA_FLIGHTS_SEARCH, outputDirectory, new Date("2026-10-24T10:00:00.000Z"));
 
   assert.deepEqual(result.chunkFiles.map(({ file, rows }) => [path.basename(file), rows]), [
-    ["North America Flights 2026-Q4.csv", 1],
-    ["North America Flights 2027-Q1.csv", 1],
+    ["North America Flights 2026-Q4.json", 1],
+    ["North America Flights 2027-Q1.json", 1],
   ]);
-  const quarter = parseCsv(readFileSync(path.join(outputDirectory, "North America Flights 2027-Q1.csv"), "utf8"));
+  const quarter = JSON.parse(readFileSync(path.join(outputDirectory, "North America Flights 2027-Q1.json"), "utf8"));
   assert.deepEqual(quarter.map((row) => row.TravelDate), ["01-Jan-2027"]);
   const metadata = JSON.parse(readFileSync(path.join(outputDirectory, "North America Flights.meta.json"), "utf8"));
   assert.equal(metadata.quarterlyChunks.length, 2);
 });
 
-test("writes a timestamped history CSV and refreshes the latest CSV", (context) => {
+test("writes timestamped history JSON and refreshes the latest JSON", (context) => {
   const outputDirectory = mkdtempSync(path.join(os.tmpdir(), "flight-search-csv-"));
   context.after(() => rmSync(outputDirectory, { recursive: true, force: true }));
 
   const generatedAt = new Date("2026-10-24T10:02:16.448Z");
-  const result = writeFlightResultsCsv(
+  const result = writeFlightResultsJson(
     {},
     "2026-10-24",
     AUSTRALIA_FLIGHTS_SEARCH,
@@ -441,8 +441,9 @@ test("writes a timestamped history CSV and refreshes the latest CSV", (context) 
   );
 
   assert.equal(result.timestamp, "2026-10-24T10-02-16-448Z");
-  assert.equal(path.basename(result.historyPath), "Australia Flights 2026-10-24T10-02-16-448Z.csv");
-  assert.equal(path.basename(result.outputPath), "Australia Flights.csv");
+  assert.equal(path.basename(result.historyPath), "Australia Flights 2026-10-24T10-02-16-448Z.json");
+  assert.equal(path.basename(result.outputPath), "Australia Flights.json");
+  assert.deepEqual(JSON.parse(readFileSync(result.outputPath, "utf8")), []);
   assert.equal(readFileSync(result.historyPath, "utf8"), readFileSync(result.outputPath, "utf8"));
   assert.equal(path.basename(result.metadataPath), "Australia Flights.meta.json");
   assert.deepEqual(JSON.parse(readFileSync(result.metadataPath, "utf8")), {
@@ -451,11 +452,11 @@ test("writes a timestamped history CSV and refreshes the latest CSV", (context) 
     rateLimitRemaining: 899,
   });
   assert.deepEqual(readdirSync(path.join(outputDirectory, "history")), [
-    "Australia Flights 2026-10-24T10-02-16-448Z.csv",
+    "Australia Flights 2026-10-24T10-02-16-448Z.json",
     "Australia Flights 2026-10-24T10-02-16-448Z.meta.json",
   ]);
   assert.throws(
-    () => writeFlightResultsCsv({}, "2026-10-24", AUSTRALIA_FLIGHTS_SEARCH, outputDirectory, generatedAt),
+    () => writeFlightResultsJson({}, "2026-10-24", AUSTRALIA_FLIGHTS_SEARCH, outputDirectory, generatedAt),
     { code: "EEXIST" },
   );
 });
@@ -491,7 +492,7 @@ test("exports North America reward searches to their own feature CSV", () => {
   assert.equal(rows[0].SearchFeature, "North America Flights");
   assert.equal(rows[0].SearchDirection, "Europe to North America");
   assert.equal(rows[0].LegDestination, "JFK");
-  assert.equal(NORTH_AMERICA_FLIGHTS_SEARCH.outputFile, "North America Flights.csv");
+  assert.equal(NORTH_AMERICA_FLIGHTS_SEARCH.outputFile, "North America Flights.json");
 });
 
 test("exports separate Asia upgrade search results for the voucher search type", () => {
