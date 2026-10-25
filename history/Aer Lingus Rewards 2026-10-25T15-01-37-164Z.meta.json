@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-10-25T15:01:37.164Z",
+  "searchDate": "2026-10-25",
+  "rateLimitRemaining": 957,
+  "quarterlyChunks": [
+    {
+      "file": "Aer Lingus Rewards 2026-Q4.csv",
+      "rows": 673
+    },
+    {
+      "file": "Aer Lingus Rewards 2027-Q1.csv",
+      "rows": 135
+    },
+    {
+      "file": "Aer Lingus Rewards 2027-Q3.csv",
+      "rows": 3
+    }
+  ]
+}
