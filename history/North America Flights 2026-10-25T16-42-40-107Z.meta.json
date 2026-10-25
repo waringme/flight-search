@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-10-25T16:42:40.107Z",
+  "searchDate": "2026-10-25",
+  "rateLimitRemaining": 871,
+  "quarterlyChunks": [
+    {
+      "file": "North America Flights 2026-Q4.csv",
+      "rows": 9728
+    },
+    {
+      "file": "North America Flights 2027-Q1.csv",
+      "rows": 35273
+    },
+    {
+      "file": "North America Flights 2027-Q2.csv",
+      "rows": 19204
+    },
+    {
+      "file": "North America Flights 2027-Q3.csv",
+      "rows": 11746
+    },
+    {
+      "file": "North America Flights 2027-Q4.csv",
+      "rows": 1983
+    }
+  ]
+}

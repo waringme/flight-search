@@ -3,7 +3,7 @@
   "framework": null,
   "functions": {
     "api/index.js": {
-      "includeFiles": "{public/**,*.csv,*.meta.json}",
+      "includeFiles": "{public/**,Australia Flights*.json,North America Flights*.json,Aer Lingus Rewards*.json}",
       "excludeFiles": "{history/**,test/**,.env,.env.*}"
     }
   },
