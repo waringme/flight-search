@@ -292,6 +292,7 @@ export function createRequestHandler({
         await sendResults(response, {
           feature: { id: feature.id, name: feature.name },
           searchDate: rows[0]?.SearchDate ?? "",
+          generatedAt: metadata.generatedAt ?? null,
           rateLimitRemaining: metadata.rateLimitRemaining ?? null,
         }, rows);
       } catch (error) {

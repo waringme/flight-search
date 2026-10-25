@@ -70,6 +70,7 @@ test("loads committed quarterly JSON when the combined export is missing", async
   writeFileSync(path.join(projectRoot, quarterlyChunks[0].file), JSON.stringify([{ ...row, Notes: 'first, "quoted"' }]));
   writeFileSync(path.join(projectRoot, quarterlyChunks[1].file), JSON.stringify([{ ...row, Notes: "second" }]));
   writeFileSync(path.join(projectRoot, "North America Flights.meta.json"), JSON.stringify({
+    generatedAt: "2026-10-24T20:31:00.000Z",
     rateLimitRemaining: 738,
     quarterlyChunks,
   }));
@@ -82,6 +83,7 @@ test("loads committed quarterly JSON when the combined export is missing", async
   const result = await response.json();
   assert.equal(result.searchDate, "2026-10-24");
   assert.equal(result.rateLimitRemaining, 738);
+  assert.equal(result.generatedAt, "2026-10-24T20:31:00.000Z");
   assert.deepEqual(result.rows.map((item) => item.Notes), ['first, "quoted"', "second"]);
   assert.equal(result.feature.id, "north-america-flights");
 });
@@ -138,7 +140,7 @@ test("streams large results as valid JSON without changing the response shape", 
   const text = await response.text();
   assert.ok(Buffer.byteLength(text) > 4.5 * 1024 * 1024);
   const result = JSON.parse(text);
-  assert.deepEqual(Object.keys(result), ["feature", "searchDate", "rateLimitRemaining", "rows"]);
+  assert.deepEqual(Object.keys(result), ["feature", "searchDate", "generatedAt", "rateLimitRemaining", "rows"]);
   assert.equal(result.rows.length, 600);
   assert.ok(result.rows.every((item) => item.Notes === notes));
 });
@@ -166,6 +168,7 @@ test("streams an empty export as an empty rows array", async (context) => {
   assert.deepEqual(await response.json(), {
     feature: { id: "australia-flights", name: "Australia Flights" },
     searchDate: "",
+    generatedAt: null,
     rateLimitRemaining: null,
     rows: [],
   });
@@ -182,7 +185,7 @@ test("serves R2 data and metadata without reading bundled local results", async 
         return new Response(JSON.stringify({ prefix: "runs/456-1/" }));
       }
       return new Response(JSON.stringify(url.pathname.endsWith(".meta.json")
-        ? { rateLimitRemaining: 777 }
+        ? { rateLimitRemaining: 777, generatedAt: "2026-10-25T20:31:00.000Z" }
         : [{ ...row, Notes: "from R2" }]));
     },
   }));
@@ -195,6 +198,7 @@ test("serves R2 data and metadata without reading bundled local results", async 
     const result = await response.json();
     assert.equal(result.rows[0].Notes, "from R2");
     assert.equal(result.rateLimitRemaining, 777);
+    assert.equal(result.generatedAt, "2026-10-25T20:31:00.000Z");
   }
   assert.equal(requests.filter((url) => url === "/current.json").length, 4);
   assert.ok(requests.every((url) => url === "/current.json" || url.startsWith("/runs/456-1/")));

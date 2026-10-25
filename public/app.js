@@ -593,13 +593,26 @@ async function loadFeature(featureId) {
   closeFlightSummary();
   synchronizeDateRanges();
   setNotice("Loading flight results…");
+  searchDate.textContent = "Loading search date…";
+  searchDate.removeAttribute("title");
   for (const panel of Object.values(resultPanels)) panel.count.textContent = "Loading…";
   try {
     const result = await fetchJson(`/api/features/${encodeURIComponent(featureId)}/results`);
     if (loadId !== featureLoadId) return;
     rawRows = result.rows;
     itineraries = buildItineraries(rawRows);
-    const searchedLabel = result.searchDate ? `Searched ${result.searchDate}` : "No search date";
+    const generatedAt = typeof result.generatedAt === "string" ? new Date(result.generatedAt) : null;
+    const hasGeneratedTime = generatedAt && !Number.isNaN(generatedAt.valueOf());
+    const timeLabel = hasGeneratedTime
+      ? new Intl.DateTimeFormat("en-GB", {
+        hour: "numeric", minute: "2-digit", hour12: true,
+      }).format(generatedAt).replace(/\s/g, "").toLowerCase()
+      : "Time unavailable";
+    const dateLabel = result.searchDate ? `Searched ${result.searchDate}` : "No search date";
+    const searchedLabel = `${dateLabel} · ${timeLabel}`;
+    if (hasGeneratedTime) {
+      searchDate.title = `File generated ${generatedAt.toLocaleString("en-GB", { timeZoneName: "short" })}`;
+    }
     searchDate.textContent = result.rateLimitRemaining === null
       ? searchedLabel
       : `${searchedLabel} · API remaining: ${Number(result.rateLimitRemaining).toLocaleString("en-GB")}`;
