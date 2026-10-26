@@ -7,6 +7,7 @@ import path from "node:path";
 
 const workflow = readFileSync(new URL("../.github/workflows/refresh-flights.yml", import.meta.url), "utf8");
 const uploadScript = workflow.split("        run: |\n").at(-1)
+  .split("\n      - name:")[0]
   .split("\n").map((line) => line.replace(/^          /, "")).join("\n");
 
 test("scheduled publisher uploads a version before updating the current pointer", (context) => {
@@ -54,4 +55,16 @@ test("failed dataset upload does not publish a new pointer", (context) => {
   assert.equal(result.status, 75);
   assert.equal(readFileSync(path.join(directory, "calls"), "utf8").trim().split("\n").length, 1);
   assert.equal(existsSync(path.join(directory, "current.json")), false);
+});
+
+test("automatic and manual R2 cleanup share the publisher concurrency lock", () => {
+  const manual = readFileSync(new URL("../.github/workflows/prune-flight-results.yml", import.meta.url), "utf8");
+  for (const config of [workflow, manual]) {
+    assert.match(config, /group: refresh-flight-results/);
+    assert.match(config, /cancel-in-progress: false/);
+    assert.match(config, /run: node scripts\/prune-r2-results\.js/);
+  }
+  assert.match(manual, /workflow_dispatch:/);
+  assert.ok(workflow.indexOf("- name: Keep only two result folders")
+    > workflow.indexOf("- name: Upload JSON and publish completed scan"));
 });
